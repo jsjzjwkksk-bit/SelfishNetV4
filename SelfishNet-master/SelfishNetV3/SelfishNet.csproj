@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SelfishNetv3</RootNamespace>
+    <AssemblyName>SelfishNetv3</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <ApplicationIcon>this.Ico</ApplicationIcon>
+    <GenerateResourceWarnOnBinaryFormatterUse>false</GenerateResourceWarnOnBinaryFormatterUse>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpPcap" Version="6.3.1" />
+    <PackageReference Include="PacketDotNet" Version="1.4.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\**" />
+    <EmbeddedResource Include="Resources\112_Minus_Orange_32x32_72.png" />
+    <EmbeddedResource Include="Resources\112_Plus_Orange_32x32_72.png" />
+    <EmbeddedResource Include="Resources\167.png" />
+    <EmbeddedResource Include="Resources\172.png" />
+    <EmbeddedResource Include="Resources\176.png" />
+    <EmbeddedResource Include="Resources\DisconnectedDrive.png" />
+    <EmbeddedResource Include="Resources\Network_ConnectTo.png" />
+    <EmbeddedResource Include="Resources\Network_Map.png" />
+    <EmbeddedResource Include="Resources\nov0caina.png" />
+    <EmbeddedResource Include="Resources\fridaynight.png" />
+    <EmbeddedResource Include="Resources\toolStripButton1.Image.png" />
+    <EmbeddedResource Include="Resources\toolStripButton2.Image.png" />
+    <EmbeddedResource Include="Resources\toolStripButton3.Image.png" />
+    <EmbeddedResource Include="Resources\toolStripButton4.Image.png" />
+    <Content Include="Resources\Computerfont.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="this.Ico" />
+  </ItemGroup>
+
+</Project>
