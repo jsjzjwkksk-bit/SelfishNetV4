@@ -22,3 +22,7 @@ C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\obj\Debug\net8.0-windo
 C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\obj\Debug\net8.0-windows\SelfishNetv3.pdb
 C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\obj\Debug\net8.0-windows\SelfishNet.genruntimeconfig.cache
 C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\obj\Debug\net8.0-windows\ref\SelfishNetv3.dll
+C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\bin\Debug\net8.0-windows\Serilog.dll
+C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\bin\Debug\net8.0-windows\Serilog.Sinks.Console.dll
+C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\bin\Debug\net8.0-windows\Serilog.Sinks.File.dll
+C:\Users\mohamed\Downloads\SelfishNet-master\SelfishNetV3\bin\Debug\net8.0-windows\System.Reactive.dll

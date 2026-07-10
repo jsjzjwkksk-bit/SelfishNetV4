@@ -40,6 +40,8 @@ namespace SelfishNetv3
             this.toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.btnStopSpoof = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator3 = new System.Windows.Forms.ToolStripSeparator();
+            this.btnEmergencyStop = new System.Windows.Forms.ToolStripButton();
+            this.toolStripSeparator4 = new System.Windows.Forms.ToolStripSeparator();
 
             this.deviceGridView = new System.Windows.Forms.DataGridView();
             this.ColRole = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -70,10 +72,14 @@ namespace SelfishNetv3
             this.showToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 
+            this.statusStrip = new System.Windows.Forms.StatusStrip();
+            this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
+
             this.toolStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.deviceGridView)).BeginInit();
             this.contextMenuViews.SuspendLayout();
             this.selfishNetTray.SuspendLayout();
+            this.statusStrip.SuspendLayout();
             this.SuspendLayout();
 
             // ── toolStrip1 ──
@@ -84,7 +90,9 @@ namespace SelfishNetv3
                 this.btnStartSpoof,
                 this.toolStripSeparator2,
                 this.btnStopSpoof,
-                this.toolStripSeparator3
+                this.toolStripSeparator3,
+                this.btnEmergencyStop,
+                this.toolStripSeparator4
             });
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
@@ -130,6 +138,20 @@ namespace SelfishNetv3
             // ── toolStripSeparator3 ──
             this.toolStripSeparator3.Name = "toolStripSeparator3";
             this.toolStripSeparator3.Size = new System.Drawing.Size(6, 41);
+
+            // ── btnEmergencyStop ──
+            this.btnEmergencyStop.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnEmergencyStop.ForeColor = System.Drawing.Color.Red;
+            this.btnEmergencyStop.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this.btnEmergencyStop.Name = "btnEmergencyStop";
+            this.btnEmergencyStop.Size = new System.Drawing.Size(110, 36);
+            this.btnEmergencyStop.Text = "⚠ EMERGENCY STOP";
+            this.btnEmergencyStop.ToolTipText = "Immediately stop all spoofing and restore all ARP tables";
+            this.btnEmergencyStop.Click += (s, e) => EmergencyStop();
+
+            // ── toolStripSeparator4 ──
+            this.toolStripSeparator4.Name = "toolStripSeparator4";
+            this.toolStripSeparator4.Size = new System.Drawing.Size(6, 41);
 
             // ── deviceGridView ──
             this.deviceGridView.AllowUserToAddRows = false;
@@ -297,7 +319,8 @@ namespace SelfishNetv3
             // ── ArpForm ──
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1028, 600);
+            this.ClientSize = new System.Drawing.Size(1028, 630);
+            this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.deviceGridView);
             this.Controls.Add(this.toolStrip1);
             this.DoubleBuffered = true;
@@ -318,8 +341,25 @@ namespace SelfishNetv3
             ((System.ComponentModel.ISupportInitialize)(this.deviceGridView)).EndInit();
             this.contextMenuViews.ResumeLayout(false);
             this.selfishNetTray.ResumeLayout(false);
+            this.statusStrip.ResumeLayout(false);
+            this.statusStrip.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
+
+            // ── statusStrip ──
+            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+                this.statusLabel
+            });
+            this.statusStrip.Location = new System.Drawing.Point(0, 605);
+            this.statusStrip.Name = "statusStrip";
+            this.statusStrip.Size = new System.Drawing.Size(1028, 25);
+            this.statusStrip.TabIndex = 2;
+
+            this.statusLabel.Name = "statusLabel";
+            this.statusLabel.Size = new System.Drawing.Size(1013, 20);
+            this.statusLabel.Spring = true;
+            this.statusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.statusLabel.Text = "Ready — Select an adapter and discover devices";
         }
 
         #endregion
@@ -332,6 +372,8 @@ namespace SelfishNetv3
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripButton btnStopSpoof;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator3;
+        private System.Windows.Forms.ToolStripButton btnEmergencyStop;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator4;
 
         // ── DataGridView (replaces TreeGridView) ──
         private System.Windows.Forms.DataGridView deviceGridView;
@@ -365,5 +407,9 @@ namespace SelfishNetv3
         private System.Windows.Forms.ContextMenuStrip selfishNetTray;
         private System.Windows.Forms.ToolStripMenuItem showToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem exitToolStripMenuItem;
+
+        // ── Status bar ──
+        private System.Windows.Forms.StatusStrip statusStrip;
+        internal System.Windows.Forms.ToolStripStatusLabel statusLabel;
     }
 }

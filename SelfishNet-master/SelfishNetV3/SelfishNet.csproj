@@ -13,11 +13,18 @@
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <ApplicationIcon>this.Ico</ApplicationIcon>
     <GenerateResourceWarnOnBinaryFormatterUse>false</GenerateResourceWarnOnBinaryFormatterUse>
+    <Version>4.0.0</Version>
+    <Product>SelfishNet</Product>
+    <Description>ARP Spoofing and Bandwidth Control Tool</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="SharpPcap" Version="6.3.1" />
     <PackageReference Include="PacketDotNet" Version="1.4.8" />
+    <PackageReference Include="Serilog" Version="4.1.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>

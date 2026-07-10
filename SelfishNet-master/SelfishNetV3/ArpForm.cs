@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Threading;
 using System.Windows.Forms;
+using Serilog;
 
 namespace SelfishNetv3
 {
@@ -306,6 +307,8 @@ namespace SelfishNetv3
         {
             if (isSpoofing || arpService is null) return;
 
+            Log.Information("Starting ARP spoofing and packet redirection");
+
             arpService.StartRedirector();
             isSpoofing = true;
 
@@ -321,6 +324,8 @@ namespace SelfishNetv3
         private void BtnStopSpoof_Click(object sender, EventArgs e)
         {
             if (!isSpoofing || arpService is null) return;
+
+            Log.Information("Stopping ARP spoofing and restoring ARP tables");
 
             arpService.StopRedirector();
             arpService.CompleteUnspoof();
@@ -368,7 +373,7 @@ namespace SelfishNetv3
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Stats update error: {ex.Message}");
+                    Log.Warning(ex, "Stats update error");
                 }
             }
 
@@ -414,7 +419,7 @@ namespace SelfishNetv3
         {
             if (devices is null || arpService is null) return;
 
-            // BUG #4 FIX: Guard against null RouterIP before using it.
+            // Guard against null RouterIP before using it.
             if (arpService.RouterIP is null)
                 return;
 
@@ -439,7 +444,7 @@ namespace SelfishNetv3
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Spoof timer error: {ex.Message}");
+                    Log.Warning(ex, "Spoof timer error");
                 }
             }
         }
@@ -470,7 +475,7 @@ namespace SelfishNetv3
 
                 switch (e.ColumnIndex)
                 {
-                    // BUG #7 FIX: Validate bandwidth cap input values.
+                    // Validate bandwidth cap input values and create Token Bucket limiters.
                     // Reject negative numbers and values that would overflow when
                     // multiplied by 1024 to convert KB → bytes.
                     case COL_DOWN_CAP:
@@ -492,6 +497,11 @@ namespace SelfishNetv3
                             else
                             {
                                 device.CapDown = downCap * 1024;
+                                // Create/update Token Bucket limiter for download
+                                device.DownloadLimiter = downCap > 0
+                                    ? new TokenBucketRateLimiter(downCap * 1024)
+                                    : null;
+                                Log.Debug("Download cap set to {CapKB} KB/s for {Ip}", downCap, device.Ip);
                             }
                         }
                         else
@@ -519,6 +529,11 @@ namespace SelfishNetv3
                             else
                             {
                                 device.CapUp = upCap * 1024;
+                                // Create/update Token Bucket limiter for upload
+                                device.UploadLimiter = upCap > 0
+                                    ? new TokenBucketRateLimiter(upCap * 1024)
+                                    : null;
+                                Log.Debug("Upload cap set to {CapKB} KB/s for {Ip}", upCap, device.Ip);
                             }
                         }
                         else
@@ -530,8 +545,9 @@ namespace SelfishNetv3
                     case COL_BLOCK:
                         bool blocked = row.Cells[COL_BLOCK].Value is true;
                         device.Redirect = blocked;
+                        Log.Information("Device {Ip} redirect set to {Blocked}", device.Ip, blocked);
 
-                        // BUG #4 FIX: Guard against null RouterIP before un-spoofing.
+                        // Guard against null RouterIP before un-spoofing.
                         if (!blocked && arpService.RouterIP is not null)
                         {
                             for (int i = 0; i < 35; i++)
@@ -542,8 +558,62 @@ namespace SelfishNetv3
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Cell value changed error: {ex.Message}");
+                Log.Error(ex, "Cell value changed error");
             }
+        }
+
+        // ───── Emergency Stop ─────
+
+        /// <summary>
+        /// Emergency Stop: immediately stops all spoofing, restores ARP tables,
+        /// and clears all bandwidth caps.
+        /// </summary>
+        internal void EmergencyStop()
+        {
+            Log.Warning("EMERGENCY STOP activated");
+
+            // Stop spoofing
+            if (isSpoofing)
+            {
+                BtnStopSpoof_Click(this, EventArgs.Empty);
+            }
+
+            // Clear all bandwidth caps
+            if (devices is not null)
+            {
+                foreach (var device in devices.GetAll())
+                {
+                    device.CapDown = 0;
+                    device.CapUp = 0;
+                    device.DownloadLimiter = null;
+                    device.UploadLimiter = null;
+                    device.Redirect = false;
+                }
+            }
+
+            // Reset grid
+            foreach (DataGridViewRow row in deviceGridView.Rows)
+            {
+                if (!row.Cells[COL_DOWN_CAP].ReadOnly)
+                    row.Cells[COL_DOWN_CAP].Value = "0";
+                if (!row.Cells[COL_UP_CAP].ReadOnly)
+                    row.Cells[COL_UP_CAP].Value = "0";
+                if (!row.Cells[COL_BLOCK].ReadOnly)
+                    row.Cells[COL_BLOCK].Value = false;
+            }
+
+            StatusMessage("Emergency Stop — all devices restored");
+        }
+
+        /// <summary>
+        /// Updates the status bar message (if StatusStrip exists) or the title bar.
+        /// </summary>
+        internal void StatusMessage(string message)
+        {
+            if (statusLabel is not null)
+                statusLabel.Text = message;
+            else
+                Text = $"SelfishNet v{Application.ProductVersion} — {message}";
         }
 
         // ───── Clean Shutdown ─────

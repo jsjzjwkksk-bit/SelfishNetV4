@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using PacketDotNet;
+using Serilog;
 using SharpPcap;
 using SharpPcap.LibPcap;
 
@@ -16,7 +17,7 @@ namespace SelfishNetv3
     /// Core ARP spoofing, network discovery, and packet redirection service.
     /// Uses SharpPcap (Npcap backend) for all packet capture and injection.
     /// </summary>
-    public sealed class ArpSpoofService : IDisposable
+    public sealed class ArpSpoofService : IArpSpoofService
     {
         // ───── State ─────
         private readonly DeviceCollection _devices;
@@ -42,6 +43,11 @@ namespace SelfishNetv3
 
         private static readonly byte[] BroadcastMac = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
         private static readonly byte[] ZeroMac = new byte[6]; // 00:00:00:00:00:00 for ARP requests (RFC 826)
+
+        /// <summary>
+        /// Raised when a spoofing operation's status changes (start/stop/error).
+        /// </summary>
+        public event EventHandler<ArpStatusChangedEventArgs>? StatusChanged;
 
         // ───── Constructor ─────
         public ArpSpoofService(NetworkInterface nic, DeviceCollection devices)
@@ -229,7 +235,7 @@ namespace SelfishNetv3
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"ARP listener error: {ex.Message}");
+                    Log.Error(ex, "ARP listener error");
                 }
             }
         }
@@ -267,13 +273,13 @@ namespace SelfishNetv3
             try
             {
                 var addresses = EnumerateSubnetAddresses().ToArray();
-                System.Diagnostics.Debug.WriteLine(
-                    $"Discovery: scanning {addresses.Length} addresses in subnet");
+                Log.Information("Discovery: scanning {AddressCount} addresses in subnet",
+                    addresses.Length);
 
                 if (addresses.Length > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"Discovery: range {addresses[0]} — {addresses[^1]}");
+                    Log.Debug("Discovery: range {First} — {Last}",
+                        addresses[0], addresses[^1]);
                 }
 
                 // Multiple sweep passes to catch devices that are slow to respond.
@@ -283,7 +289,7 @@ namespace SelfishNetv3
                 {
                     if (token.IsCancellationRequested) break;
 
-                    System.Diagnostics.Debug.WriteLine($"Discovery: sweep {sweep + 1}/{SWEEP_COUNT}");
+                    Log.Debug("Discovery: sweep {Current}/{Total}", sweep + 1, SWEEP_COUNT);
 
                     foreach (var ip in addresses)
                     {
@@ -299,12 +305,12 @@ namespace SelfishNetv3
                         Thread.Sleep(2000);
                 }
 
-                System.Diagnostics.Debug.WriteLine("Discovery: completed all sweeps");
+                Log.Information("Discovery: completed all sweeps");
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Discovery error: {ex.Message}");
+                Log.Error(ex, "Discovery error");
             }
         }
 
@@ -383,6 +389,7 @@ namespace SelfishNetv3
 
             if (RouterMAC is null)
             {
+                Log.Error("No router MAC found — cannot redirect packets");
                 MessageBox.Show("No router found to redirect packets.");
                 return;
             }
@@ -396,6 +403,9 @@ namespace SelfishNetv3
             var dstMac = new byte[6];
             var dstIp = new byte[4];
             var srcIp = new byte[4];
+
+            Log.Information("Redirector started — router MAC: {RouterMAC}",
+                BitConverter.ToString(routerMacLocal));
 
             while (!token.IsCancellationRequested)
             {
@@ -411,18 +421,18 @@ namespace SelfishNetv3
 
                     var pktData = rawPacket.Data;
 
-                    // BUG #6 FIX: Validate minimum packet size for Ethernet + IP header
+                    // Validate minimum packet size for Ethernet + IP header
                     // Minimum: 14 (Ethernet) + 20 (IP header) = 34 bytes
                     const int MIN_IP_PACKET = 34;
                     if (pktData.Length < MIN_IP_PACKET)
                         continue;
 
-                    // BUG #6 FIX: Validate EtherType at offset 12-13: must be 0x0800 for IPv4
+                    // Validate EtherType at offset 12-13: must be 0x0800 for IPv4
                     ushort etherType = (ushort)((pktData[12] << 8) | pktData[13]);
                     if (etherType != 0x0800)
                         continue;
 
-                    // BUG #6 FIX: Validate IP version and header length
+                    // Validate IP version and header length
                     if (pktData[14] >> 4 != 4)  // Must be IPv4
                         continue;
 
@@ -432,7 +442,7 @@ namespace SelfishNetv3
 
                     int pktLen = pktData.Length;
 
-                    // BUG #5 FIX: Extract all addresses upfront for clarity
+                    // Extract all addresses upfront for clarity
                     Array.Copy(pktData, 0, dstMac, 0, 6);    // Dest MAC at offset 0
                     Array.Copy(pktData, 6, srcMac, 0, 6);    // Source MAC at offset 6
                     Array.Copy(pktData, 14 + 12, srcIp, 0, 4); // Source IP at offset 26
@@ -455,7 +465,7 @@ namespace SelfishNetv3
                     // ═══════════════════════════════════════════════════════════
                     // CASE 2: PACKET FROM ROUTER (destined for spoofed devices)
                     // ═══════════════════════════════════════════════════════════
-                    if (NetworkHelper.AreValuesEqual(srcMac, routerMacLocal))  // BUG #1 FIX: use local copy
+                    if (NetworkHelper.AreValuesEqual(srcMac, routerMacLocal))
                     {
                         // Packet destined for us — count as received
                         if (NetworkHelper.AreValuesEqual(dstIp, LocalIP))
@@ -470,11 +480,20 @@ namespace SelfishNetv3
                         var targetDevice = _devices.GetDeviceByIp(dstIp);
                         if (targetDevice is not null && targetDevice.Redirect)
                         {
-                            // BUG #2 FIX: Read current bytes atomically, then check
-                            // if forwarding this packet would exceed the cap.
-                            long downCap = targetDevice.CapDown;
-                            long currentDlBytes = Interlocked.Read(ref targetDevice.bytesReceivedField);
-                            bool shouldForward = (downCap == 0) || (currentDlBytes + pktLen <= downCap);
+                            // Token Bucket bandwidth control for downloads
+                            bool shouldForward;
+                            var downLimiter = targetDevice.DownloadLimiter;
+                            if (downLimiter is not null)
+                            {
+                                shouldForward = downLimiter.TryConsume(pktLen);
+                            }
+                            else
+                            {
+                                // Fallback to legacy byte-cap if no Token Bucket
+                                long downCap = targetDevice.CapDown;
+                                long currentDlBytes = Interlocked.Read(ref targetDevice.bytesReceivedField);
+                                shouldForward = (downCap == 0) || (currentDlBytes + pktLen <= downCap);
+                            }
 
                             if (shouldForward)
                             {
@@ -501,18 +520,27 @@ namespace SelfishNetv3
                     var sourceDevice = _devices.GetDeviceByMac(srcMac);
                     if (sourceDevice is not null && sourceDevice.Redirect)
                     {
-                        // BUG #2 FIX: Read current bytes atomically, then check
-                        // if forwarding this packet would exceed the cap.
-                        long upCap = sourceDevice.CapUp;
-                        long currentUlBytes = Interlocked.Read(ref sourceDevice.bytesSentField);
-                        bool shouldForward = (upCap == 0) || (currentUlBytes + pktLen <= upCap);
+                        // Token Bucket bandwidth control for uploads
+                        bool shouldForward;
+                        var upLimiter = sourceDevice.UploadLimiter;
+                        if (upLimiter is not null)
+                        {
+                            shouldForward = upLimiter.TryConsume(pktLen);
+                        }
+                        else
+                        {
+                            // Fallback to legacy byte-cap if no Token Bucket
+                            long upCap = sourceDevice.CapUp;
+                            long currentUlBytes = Interlocked.Read(ref sourceDevice.bytesSentField);
+                            shouldForward = (upCap == 0) || (currentUlBytes + pktLen <= upCap);
+                        }
 
                         if (shouldForward)
                         {
                             // Rewrite Ethernet header: dst = router MAC, src = our MAC
                             var fwdData = new byte[pktLen];
                             Array.Copy(pktData, fwdData, pktLen);
-                            Array.Copy(routerMacLocal, 0, fwdData, 0, 6);  // BUG #1 FIX: use local copy
+                            Array.Copy(routerMacLocal, 0, fwdData, 0, 6);
                             Array.Copy(LocalMAC, 0, fwdData, 6, 6);
                             _redirectDevice.SendPacket(fwdData);
                             Interlocked.Add(ref sourceDevice.bytesSentField, pktLen);
@@ -526,9 +554,11 @@ namespace SelfishNetv3
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Redirector error: {ex.Message}");
+                    Log.Error(ex, "Redirector error");
                 }
             }
+
+            Log.Information("Redirector stopped");
         }
 
         /// <summary>
@@ -584,6 +614,14 @@ namespace SelfishNetv3
             // Tell dev1 our real MAC (so it can reach us)
             SendPacketSafe(BuildArpPacket(LocalMAC, mac1, ArpOperation.Response,
                 mac1, ipBytes1, LocalMAC, LocalIP));
+
+            // Notify subscribers
+            StatusChanged?.Invoke(this, new ArpStatusChangedEventArgs
+            {
+                TargetIp = ip1,
+                IsActive = true,
+                Message = $"Spoofing active between {ip1} and {ip2}"
+            });
         }
 
         /// <summary>
@@ -615,6 +653,14 @@ namespace SelfishNetv3
             // Tell dev2 the real MAC of dev1
             SendPacketSafe(BuildArpPacket(mac2, mac1, ArpOperation.Request,
                 mac1, ipBytes1, BroadcastMac, ipBytes2));
+
+            // Notify subscribers
+            StatusChanged?.Invoke(this, new ArpStatusChangedEventArgs
+            {
+                TargetIp = ip1,
+                IsActive = false,
+                Message = $"ARP restored between {ip1} and {ip2}"
+            });
         }
 
         /// <summary>
@@ -673,7 +719,7 @@ namespace SelfishNetv3
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"SendPacket error: {ex.Message}");
+                Log.Warning(ex, "SendPacket error");
             }
         }
 
